@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<!--
+=============================================================
+  ⚽ KICKOFF - 2D Football Game
+=============================================================
+  HOW TO RUN:
+    Simply open this HTML file in any modern browser.
+    No server, no dependencies, no installation needed.
+
+  DESKTOP CONTROLS:
+    WASD / Arrow Keys  — Move player
+    SPACE              — Kick / Shoot ball
+
+  MOBILE CONTROLS:
+    Virtual joystick (bottom-left)  — Move player
+    KICK button (bottom-right)      — Kick / Shoot ball
+
+  OBJECTIVE:
+    Score more goals than the AI within 90 seconds!
+    The AI gets smarter as the game progresses.
+=============================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>⚽ KICKOFF - Football Game</title>
+<style>
+  /* ─── Reset & Base ──────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #0a1628;
+    font-family: 'Courier New', monospace;
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* ─── Canvas Wrapper ────────────────────────────────────── */
+  #gameWrapper {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #gameCanvas {
+    display: block;
+    border: 3px solid #1e3a5f;
+    box-shadow: 0 0 60px rgba(0,180,255,0.15), 0 0 120px rgba(0,80,180,0.08);
+    border-radius: 4px;
+    cursor: none;
+  }
+
+  /* ─── HUD Bar ───────────────────────────────────────────── */
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: rgba(0,8,20,0.85);
+    border: 1px solid #1e4a7a;
+    border-radius: 50px;
+    padding: 6px 20px;
+    backdrop-filter: blur(6px);
+    z-index: 10;
+    white-space: nowrap;
+  }
+  .hud-score {
+    font-size: clamp(18px, 3vw, 28px);
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #fff;
+    min-width: 32px;
+    text-align: center;
+  }
+  .hud-score.player { color: #3bf; }
+  .hud-score.ai     { color: #f64; }
+  .hud-sep {
+    font-size: clamp(14px, 2vw, 22px);
+    color: #456;
+    margin: 0 10px;
+  }
+  #timerBox {
+    font-size: clamp(13px, 2vw, 18px);
+    color: #8bc;
+    letter-spacing: 3px;
+    margin-left: 18px;
+    background: rgba(0,30,60,0.5);
+    border: 1px solid #1e4a7a;
+    border-radius: 30px;
+    padding: 2px 12px;
+  }
+  #timerBox.urgent { color: #f96; animation: blink 0.7s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ─── Overlay Screens ───────────────────────────────────── */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,8,20,0.88);
+    backdrop-filter: blur(8px);
+    z-index: 20;
+    gap: 18px;
+    padding: 20px;
+  }
+  .overlay.hidden { display: none; }
+
+  .overlay-title {
+    font-size: clamp(28px, 6vw, 64px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #3bf 0%, #06f 60%, #93f 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    line-height: 1.1;
+  }
+  .overlay-sub {
+    font-size: clamp(12px, 2vw, 17px);
+    color: #678;
+    letter-spacing: 2px;
+    text-align: center;
+    line-height: 1.8;
+  }
+  .overlay-result {
+    font-size: clamp(16px, 3vw, 28px);
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #fff;
+    text-align: center;
+  }
+  .overlay-result span.win  { color: #3f9; }
+  .overlay-result span.lose { color: #f64; }
+  .overlay-result span.draw { color: #fc3; }
+
+  .btn {
+    padding: 12px 36px;
+    font-family: 'Courier New', monospace;
+    font-size: clamp(13px, 2vw, 18px);
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #fff;
+    background: linear-gradient(135deg, #0060d0, #0040a0);
+    border: 1px solid #3bf;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 0 20px rgba(0,100,255,0.3);
+  }
+  .btn:hover, .btn:active {
+    background: linear-gradient(135deg, #0090ff, #0060d0);
+    box-shadow: 0 0 30px rgba(0,150,255,0.5);
+    transform: scale(1.04);
+  }
+
+  /* ─── Mobile Controls ───────────────────────────────────── */
+  #mobileControls {
+    position: absolute;
+    bottom: 20px;
+    left: 0; right: 0;
+    display: none;
+    pointer-events: none;
+    z-index: 15;
+  }
+  #joystickZone {
+    position: absolute;
+    bottom: 10px;
+    left: 20px;
+    width: 110px;
+    height: 110px;
+    pointer-events: all;
+  }
+  #joystickBase {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(0,80,180,0.25);
+    border: 2px solid rgba(60,180,255,0.4);
+  }
+  #joystickThumb {
+    position: absolute;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #5cf, #07f);
+    border: 2px solid rgba(255,255,255,0.3);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    transition: none;
+    box-shadow: 0 0 12px rgba(0,120,255,0.5);
+  }
+  #kickBtn {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    width: 74px; height: 74px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #f96, #e30);
+    border: 2px solid rgba(255,180,80,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: #fff;
+    font-weight: 900;
+    cursor: pointer;
+    pointer-events: all;
+    box-shadow: 0 0 18px rgba(255,100,0,0.4);
+    letter-spacing: 0;
+    transition: transform 0.1s;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  #kickBtn:active { transform: scale(0.9); }
+
+  /* ─── Goal Flash ────────────────────────────────────────── */
+  #goalFlash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 18;
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(36px, 8vw, 80px);
+    font-weight: 900;
+    letter-spacing: 8px;
+    color: #fff;
+    text-shadow: 0 0 30px currentColor;
+    transition: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <span class="hud-score player" id="scorePlayer">0</span>
+    <span class="hud-sep">—</span>
+    <span class="hud-score ai" id="scoreAI">0</span>
+    <div id="timerBox">1:30</div>
+  </div>
+
+  <!-- Goal Flash -->
+  <div id="goalFlash"></div>
+
+  <!-- Start Screen -->
+  <div class="overlay" id="startScreen">
+    <div class="overlay-title">⚽ KICKOFF</div>
+    <div class="overlay-sub">
+      WASD / ARROWS — Move &nbsp;|&nbsp; SPACE — Kick<br/>
+      Score more goals in 90 seconds!
+    </div>
+    <button class="btn" id="startBtn">KICK OFF</button>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="overlay hidden" id="endScreen">
+    <div class="overlay-title">FULL TIME</div>
+    <div class="overlay-result" id="resultText"></div>
+    <div class="overlay-sub" id="finalScore"></div>
+    <button class="btn" id="restartBtn">PLAY AGAIN</button>
+  </div>
+
+  <!-- Mobile Controls -->
+  <div id="mobileControls">
+    <div id="joystickZone">
+      <div id="joystickBase"></div>
+      <div id="joystickThumb"></div>
+    </div>
+    <div id="kickBtn">⚽</div>
+  </div>
+</div>
+
+<script>
+/* =============================================================
+   ⚽ KICKOFF — 2D Football Game
+   -------------------------------------------------------------
+   Sections:
+     1. Config & Constants
+     2. Game State
+     3. Canvas Setup & Resize
+     4. Input Handling (keyboard + touch)
+     5. Physics & Math Helpers
+     6. Ball Logic
+     7. Player Logic
+     8. AI Logic
+     9. Collision Detection
+    10. Goal Detection
+    11. Game Loop & Update
+    12. Rendering
+    13. UI & HUD
+    14. Sound (Web Audio API)
+    15. Game Init & Control
+============================================================= */
+
+// ─────────────────────────────────────────────────────────────
+// 1. CONFIG & CONSTANTS
+// ─────────────────────────────────────────────────────────────
+const CFG = {
+  MATCH_DURATION: 90,      // seconds
+  PLAYER_RADIUS:  14,
+  BALL_RADIUS:    9,
+  PLAYER_SPEED:   3.8,
+  AI_SPEED_BASE:  2.8,
+  FRICTION:       0.97,    // ball friction per frame
+  KICK_FORCE:     11,
+  AI_KICK_FORCE:  9,
+  GOAL_WIDTH:     110,     // height of goal opening in canvas px
+  GOAL_DEPTH:     22,      // how far goal extends beyond sideline
+  KICKOFF_DELAY:  1200,    // ms pause after goal
+  FPS_TARGET:     60,
+};
+
+// Field proportions (logical units, scaled to canvas)
+const FIELD = {
+  W: 800, H: 520,
+  MARGIN_X: 40, MARGIN_Y: 30,
+};
+
+// ─────────────────────────────────────────────────────────────
+// 2. GAME STATE
+// ─────────────────────────────────────────────────────────────
+const state = {
+  running:   false,
+  paused:    false,
+  timeLeft:  CFG.MATCH_DURATION,
+  scoreP:    0,
+  scoreAI:   0,
+  kickoff:   false,       // waiting for kick-off
+  lastTime:  0,
+  dt:        0,
+  flashTimer: 0,
+};
+
+// Ball object
+const ball = {
+  x: 0, y: 0,
+  vx: 0, vy: 0,
+  radius: CFG.BALL_RADIUS,
+  lastTouched: null,      // 'player' | 'ai'
+};
+
+// Human player
+const player = {
+  x: 0, y: 0,
+  vx: 0, vy: 0,
+  radius: CFG.PLAYER_RADIUS,
+  speed: CFG.PLAYER_SPEED,
+  hasBall: false,
+  kickCooldown: 0,
+  kickAnim: 0,            // kick visual effect timer
+  team: 'player',
+};
+
+// AI player
+const ai = {
+  x: 0, y: 0,
+  vx: 0, vy: 0,
+  radius: CFG.PLAYER_RADIUS,
+  speed: CFG.AI_SPEED_BASE,
+  hasBall: false,
+  kickCooldown: 0,
+  kickAnim: 0,
+  team: 'ai',
+  state: 'idle',          // 'attack' | 'defend' | 'idle'
+  thinkTimer: 0,
+};
+
+// ─────────────────────────────────────────────────────────────
+// 3. CANVAS SETUP & RESIZE
+// ─────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('gameCanvas');
+const ctx     = canvas.getContext('2d');
+let scale     = 1;
+let offsetX   = 0;
+let offsetY   = 0;
+
+function resizeCanvas() {
+  const wrap = document.getElementById('gameWrapper');
+  const ww = wrap.clientWidth;
+  const wh = wrap.clientHeight - 50; // leave space for HUD
+  const ratio = FIELD.W / FIELD.H;
+  let cw, ch;
+  if (ww / wh > ratio) { ch = Math.min(wh, 560); cw = ch * ratio; }
+  else                  { cw = Math.min(ww, 900); ch = cw / ratio; }
+  canvas.width  = cw;
+  canvas.height = ch;
+  scale   = cw / FIELD.W;
+  offsetX = 0;
+  offsetY = 0;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ─────────────────────────────────────────────────────────────
+// 4. INPUT HANDLING
+// ─────────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); tryKick(); }
+  if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
+});
+window.addEventListener('keyup',  e => { keys[e.code] = false; });
+
+function getInputDir() {
+  let dx = 0, dy = 0;
+  if (keys['ArrowLeft']  || keys['KeyA']) dx -= 1;
+  if (keys['ArrowRight'] || keys['KeyD']) dx += 1;
+  if (keys['ArrowUp']    || keys['KeyW']) dy -= 1;
+  if (keys['ArrowDown']  || keys['KeyS']) dy += 1;
+  // Mobile joystick override
+  if (joystick.active) { dx = joystick.dx; dy = joystick.dy; }
+  const len = Math.hypot(dx, dy);
+  if (len > 0) { dx /= len; dy /= len; }
+  return { dx, dy };
+}
+
+// ── Mobile Joystick ──────────────────────────────────────────
+const joystick = { active: false, dx: 0, dy: 0, startX: 0, startY: 0 };
+const jZone    = document.getElementById('joystickZone');
+const jThumb   = document.getElementById('joystickThumb');
+const kickBtn  = document.getElementById('kickBtn');
+const JMAX     = 38; // max thumb displacement px
+
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+      || window.matchMedia('(pointer: coarse)').matches;
+}
+function showMobileControls() {
+  document.getElementById('mobileControls').style.display = 'block';
+}
+
+jZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const r = jZone.getBoundingClientRect();
+  joystick.active = true;
+  joystick.startX = r.left + r.width  / 2;
+  joystick.startY = r.top  + r.height / 2;
+  updateJoystick(t);
+}, { passive: false });
+
+jZone.addEventListener('touchmove', e => {
+  e.preventDefault();
+  updateJoystick(e.changedTouches[0]);
+}, { passive: false });
+
+['touchend','touchcancel'].forEach(ev => {
+  jZone.addEventListener(ev, e => {
+    e.preventDefault();
+    joystick.active = false;
+    joystick.dx = joystick.dy = 0;
+    jThumb.style.transform = 'translate(-50%, -50%)';
+  }, { passive: false });
+});
+
+function updateJoystick(touch) {
+  let dx = touch.clientX - joystick.startX;
+  let dy = touch.clientY - joystick.startY;
+  const dist = Math.hypot(dx, dy);
+  if (dist > JMAX) { dx *= JMAX / dist; dy *= JMAX / dist; }
+  joystick.dx = dx / JMAX;
+  joystick.dy = dy / JMAX;
+  jThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+
+kickBtn.addEventListener('touchstart', e => { e.preventDefault(); tryKick(); }, { passive: false });
+kickBtn.addEventListener('click', tryKick);
+
+// ─────────────────────────────────────────────────────────────
+// 5. PHYSICS & MATH HELPERS
+// ─────────────────────────────────────────────────────────────
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function normalize(dx, dy) {
+  const l = Math.hypot(dx, dy);
+  return l > 0 ? { x: dx/l, y: dy/l } : { x: 0, y: 0 };
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Field bounds (logical units)
+function fieldBounds() {
+  return {
+    left:   FIELD.MARGIN_X + CFG.PLAYER_RADIUS,
+    right:  FIELD.W - FIELD.MARGIN_X - CFG.PLAYER_RADIUS,
+    top:    FIELD.MARGIN_Y + CFG.PLAYER_RADIUS,
+    bottom: FIELD.H - FIELD.MARGIN_Y - CFG.PLAYER_RADIUS,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 6. BALL LOGIC
+// ─────────────────────────────────────────────────────────────
+function placeBallCenter() {
+  ball.x  = FIELD.W / 2;
+  ball.y  = FIELD.H / 2;
+  ball.vx = 0;
+  ball.vy = 0;
+  ball.lastTouched = null;
+}
+
+function updateBall() {
+  if (state.kickoff) return;
+
+  ball.x  += ball.vx;
+  ball.y  += ball.vy;
+  ball.vx *= CFG.FRICTION;
+  ball.vy *= CFG.FRICTION;
+
+  // Slow very small velocities to zero
+  if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
+  if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
+
+  // Boundary collision (top/bottom walls)
+  const bTop    = FIELD.MARGIN_Y  + ball.radius;
+  const bBottom = FIELD.H - FIELD.MARGIN_Y - ball.radius;
+  const bLeft   = FIELD.MARGIN_X  + ball.radius;
+  const bRight  = FIELD.W - FIELD.MARGIN_X - ball.radius;
+
+  // Goal areas — don't bounce on goal side walls
+  const goalTop    = FIELD.H/2 - CFG.GOAL_WIDTH/2;
+  const goalBottom = FIELD.H/2 + CFG.GOAL_WIDTH/2;
+
+  if (ball.y < bTop)    { ball.y = bTop;    ball.vy *= -0.7; }
+  if (ball.y > bBottom) { ball.y = bBottom; ball.vy *= -0.7; }
+
+  // Left wall (player goal side)
+  if (ball.x < bLeft) {
+    if (ball.y > goalTop && ball.y < goalBottom) {
+      // In goal zone — check if it's inside goal depth
+      if (ball.x < FIELD.MARGIN_X - CFG.GOAL_DEPTH) {
+        // GOAL for AI
+        scoreGoal('ai');
+        return;
+      }
+    } else {
+      ball.x = bLeft; ball.vx *= -0.7;
+    }
+  }
+
+  // Right wall (AI goal side)
+  if (ball.x > bRight) {
+    if (ball.y > goalTop && ball.y < goalBottom) {
+      if (ball.x > FIELD.W - FIELD.MARGIN_X + CFG.GOAL_DEPTH) {
+        // GOAL for player
+        scoreGoal('player');
+        return;
+      }
+    } else {
+      ball.x = bRight; ball.vx *= -0.7;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 7. PLAYER LOGIC
+// ─────────────────────────────────────────────────────────────
+function updatePlayer() {
+  if (!state.running || state.kickoff) return;
+
+  const { dx, dy } = getInputDir();
+  const bounds = fieldBounds();
+
+  player.x = clamp(player.x + dx * player.speed, bounds.left, bounds.right);
+  player.y = clamp(player.y + dy * player.speed, bounds.top,  bounds.bottom);
+
+  if (player.kickCooldown > 0) player.kickCooldown--;
+  if (player.kickAnim > 0)     player.kickAnim--;
+
+  // Check if player touches ball
+  const d = dist(player, ball);
+  if (d < player.radius + ball.radius + 2) {
+    // Push ball away from player
+    const n = normalize(ball.x - player.x, ball.y - player.y);
+    ball.x = player.x + n.x * (player.radius + ball.radius + 1);
+    ball.y = player.y + n.y * (player.radius + ball.radius + 1);
+    // Transfer momentum
+    ball.vx += n.x * 2 + player.vx * 0.3;
+    ball.vy += n.y * 2 + player.vy * 0.3;
+    ball.lastTouched = 'player';
+    player.hasBall = true;
+  } else {
+    player.hasBall = false;
+  }
+}
+
+function tryKick() {
+  if (!state.running || state.paused) return;
+  if (player.kickCooldown > 0) return;
+
+  const d = dist(player, ball);
+  if (d < player.radius + ball.radius + 20) {
+    // Kick toward the AI goal (right side) with a slight aim
+    const targetX = FIELD.W - FIELD.MARGIN_X + 10;
+    const targetY = FIELD.H / 2 + (Math.random() - 0.5) * 60;
+    const n = normalize(targetX - ball.x, targetY - ball.y);
+
+    // Bias kick toward goal
+    ball.vx = n.x * CFG.KICK_FORCE;
+    ball.vy = n.y * CFG.KICK_FORCE;
+    ball.lastTouched = 'player';
+
+    player.kickCooldown = 20;
+    player.kickAnim     = 12;
+    playSound('kick');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 8. AI LOGIC
+// ─────────────────────────────────────────────────────────────
+function updateAI() {
+  if (!state.running || state.kickoff) return;
+
+  ai.thinkTimer--;
+  if (ai.thinkTimer < 0) {
+    ai.thinkTimer = 18 + Math.random() * 20; // re-evaluate ~every 20 frames
+    decideAIState();
+  }
+
+  if (ai.kickCooldown > 0) ai.kickCooldown--;
+  if (ai.kickAnim > 0)     ai.kickAnim--;
+
+  const bounds = fieldBounds();
+  let targetX, targetY;
+
+  // ── AI Decision Tree ──
+  if (ai.state === 'attack') {
+    // Move toward ball, then shoot toward player goal
+    if (dist(ai, ball) > ai.radius + ball.radius + 5) {
+      targetX = ball.x;
+      targetY = ball.y;
+    } else {
+      // Has ball — shoot toward left goal
+      targetX = FIELD.MARGIN_X - 10;
+      targetY = FIELD.H / 2;
+    }
+  } else if (ai.state === 'defend') {
+    // Return to defensive position, intercept ball
+    const defensePosX = FIELD.W * 0.72;
+    const ballComingLeft = ball.vx < -0.5 && ball.x > FIELD.W / 2;
+    if (ballComingLeft) {
+      targetX = ball.x + ball.vx * 10; // predict ball pos
+      targetY = ball.y + ball.vy * 10;
+    } else {
+      targetX = defensePosX;
+      targetY = lerp(ai.y, FIELD.H / 2, 0.1);
+    }
+  } else {
+    // Idle — gentle chase
+    targetX = lerp(ball.x, FIELD.W * 0.65, 0.4);
+    targetY = lerp(ball.y, FIELD.H / 2,  0.3);
+  }
+
+  // Move toward target
+  const dx = targetX - ai.x;
+  const dy = targetY - ai.y;
+  const d  = Math.hypot(dx, dy);
+  if (d > 2) {
+    const speed = ai.speed * (state.timeLeft < 30 ? 1.15 : 1); // speeds up late game
+    ai.x = clamp(ai.x + (dx / d) * speed, bounds.left, bounds.right);
+    ai.y = clamp(ai.y + (dy / d) * speed, bounds.top,  bounds.bottom);
+  }
+
+  // AI-ball collision
+  const dBall = dist(ai, ball);
+  if (dBall < ai.radius + ball.radius + 2) {
+    const n = normalize(ball.x - ai.x, ball.y - ai.y);
+    ball.x = ai.x + n.x * (ai.radius + ball.radius + 1);
+    ball.y = ai.y + n.y * (ai.radius + ball.radius + 1);
+    ball.lastTouched = 'ai';
+    ai.hasBall = true;
+
+    // AI kicks toward player goal when close enough
+    if (ai.kickCooldown === 0 && ai.state === 'attack') {
+      const gx = FIELD.MARGIN_X - 10;
+      const gy = FIELD.H / 2 + (Math.random() - 0.5) * 80;
+      const kn = normalize(gx - ball.x, gy - ball.y);
+      ball.vx = kn.x * CFG.AI_KICK_FORCE;
+      ball.vy = kn.y * CFG.AI_KICK_FORCE;
+      ai.kickCooldown = 30;
+      ai.kickAnim     = 12;
+      playSound('kick');
+    }
+  } else {
+    ai.hasBall = false;
+  }
+
+  // Player–AI collision (push each other)
+  const dPA = dist(player, ai);
+  const minD = player.radius + ai.radius;
+  if (dPA < minD) {
+    const n  = normalize(ai.x - player.x, ai.y - player.y);
+    const overlap = (minD - dPA) / 2;
+    player.x -= n.x * overlap;
+    player.y -= n.y * overlap;
+    ai.x     += n.x * overlap;
+    ai.y     += n.y * overlap;
+  }
+}
+
+function decideAIState() {
+  const ballOnAISide    = ball.x > FIELD.W / 2;
+  const ballNearAIGoal  = ball.x > FIELD.W * 0.82;
+  const playerNearBall  = dist(player, ball) < 80;
+  const timeLeft        = state.timeLeft;
+  const losing          = state.scoreAI < state.scoreP;
+
+  if (ballNearAIGoal || (playerNearBall && ballOnAISide)) {
+    ai.state = 'defend';
+  } else if (!ballOnAISide || losing || timeLeft < 40) {
+    ai.state = 'attack';
+  } else {
+    ai.state = 'idle';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 9. GOAL DETECTION
+// ─────────────────────────────────────────────────────────────
+function scoreGoal(scorer) {
+  if (!state.running) return;
+
+  if (scorer === 'player') {
+    state.scoreP++;
+    showGoalFlash('GOAL! ⚽', '#3cf');
+    playSound('goalPlayer');
+  } else {
+    state.scoreAI++;
+    showGoalFlash('OUCH! ⚽', '#f64');
+    playSound('goalAI');
+  }
+
+  updateScoreUI();
+  resetPositions(scorer === 'player' ? 'ai' : 'player');
+}
+
+function showGoalFlash(text, color) {
+  const el = document.getElementById('goalFlash');
+  el.textContent = text;
+  el.style.color = color;
+  el.style.opacity = '1';
+  el.style.textShadow = `0 0 40px ${color}`;
+  setTimeout(() => { el.style.opacity = '0'; }, 1200);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 10. RESET / KICK-OFF
+// ─────────────────────────────────────────────────────────────
+function resetPositions(whoKicksOff) {
+  state.kickoff = true;
+  placeBallCenter();
+
+  // Player starts on left half, AI on right
+  player.x = FIELD.W * 0.28;
+  player.y = FIELD.H / 2;
+
+  ai.x = FIELD.W * 0.72;
+  ai.y = FIELD.H / 2;
+
+  player.vx = player.vy = 0;
+  ai.vx = ai.vy = 0;
+  player.hasBall = ai.hasBall = false;
+
+  setTimeout(() => {
+    state.kickoff = false;
+    // Give small nudge so ball isn't perfectly still
+    if (whoKicksOff === 'player') {
+      ball.vx = 0.3;
+    } else {
+      ball.vx = -0.3;
+    }
+  }, CFG.KICKOFF_DELAY);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 11. GAME LOOP & UPDATE
+// ─────────────────────────────────────────────────────────────
+let timerInterval = null;
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (!state.running || state.paused) return;
+    state.timeLeft--;
+    updateTimerUI();
+    if (state.timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function gameLoop(timestamp) {
+  if (!state.running) return;
+  requestAnimationFrame(gameLoop);
+
+  state.dt = Math.min((timestamp - state.lastTime) / (1000 / CFG.FPS_TARGET), 3);
+  state.lastTime = timestamp;
+
+  if (!state.paused) {
+    updatePlayer();
+    updateAI();
+    updateBall();
+  }
+
+  render();
+}
+
+// ─────────────────────────────────────────────────────────────
+// 12. RENDERING
+// ─────────────────────────────────────────────────────────────
+function render() {
+  const W = canvas.width;
+  const H = canvas.height;
+  const s = scale;
+
+  ctx.clearRect(0, 0, W, H);
+
+  drawField(W, H, s);
+  drawBall(s);
+  drawEntity(player, '#3bf', '#1a8fc0', s);
+  drawEntity(ai,     '#f64', '#c03010', s);
+  drawKickEffect(player, s);
+  drawKickEffect(ai, s);
+
+  if (state.paused) drawPauseOverlay(W, H);
+}
+
+function drawField(W, H, s) {
+  // Grass background
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   '#0d3d1a');
+  grad.addColorStop(0.5, '#104520');
+  grad.addColorStop(1,   '#0d3d1a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Grass stripes
+  ctx.globalAlpha = 0.07;
+  const stripeW = W / 8;
+  for (let i = 0; i < 8; i += 2) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(i * stripeW, 0, stripeW, H);
+  }
+  ctx.globalAlpha = 1;
+
+  // Field outline
+  const mx = FIELD.MARGIN_X * s;
+  const my = FIELD.MARGIN_Y * s;
+  const fw = (FIELD.W - FIELD.MARGIN_X * 2) * s;
+  const fh = (FIELD.H - FIELD.MARGIN_Y * 2) * s;
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(mx, my, fw, fh);
+
+  // Centre line
+  ctx.beginPath();
+  ctx.moveTo(W / 2, my);
+  ctx.lineTo(W / 2, my + fh);
+  ctx.stroke();
+
+  // Centre circle
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, 55 * s, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Centre dot
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, 3 * s, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Penalty areas
+  const paW = 90 * s, paH = 180 * s;
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  // Left
+  ctx.strokeRect(mx, H/2 - paH/2, paW, paH);
+  // Right
+  ctx.strokeRect(W - mx - paW, H/2 - paH/2, paW, paH);
+
+  // Goals
+  drawGoals(s, mx, my, fh);
+}
+
+function drawGoals(s, mx, my, fh) {
+  const gw   = CFG.GOAL_WIDTH * s;    // goal opening height
+  const gdep = CFG.GOAL_DEPTH * s;    // goal depth (sticking out)
+  const gTop = H_scaled() / 2 - gw / 2;
+
+  ctx.lineWidth = 3;
+
+  // Left goal (player goal)
+  ctx.strokeStyle = '#3bf';
+  ctx.fillStyle   = 'rgba(0,150,255,0.08)';
+  ctx.beginPath();
+  ctx.rect(mx - gdep, gTop, gdep, gw);
+  ctx.fill();
+  ctx.stroke();
+
+  // Right goal (AI goal)
+  ctx.strokeStyle = '#f64';
+  ctx.fillStyle   = 'rgba(255,100,40,0.08)';
+  ctx.beginPath();
+  ctx.rect(canvas.width - mx, gTop, gdep, gw);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.lineWidth = 2;
+}
+
+function H_scaled() { return canvas.height; }
+
+function drawBall(s) {
+  const bx = ball.x * s;
+  const by = ball.y * s;
+  const br = ball.radius * s;
+  const speed = Math.hypot(ball.vx, ball.vy);
+
+  // Shadow
+  ctx.save();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(bx + 2*s, by + 3*s, br * 0.85, br * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Motion blur effect when fast
+  if (speed > 4) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(bx - ball.vx * 1.2 * s, by - ball.vy * 1.2 * s, br * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Ball body
+  const bg = ctx.createRadialGradient(bx - br*0.3, by - br*0.3, br*0.05, bx, by, br);
+  bg.addColorStop(0,   '#ffffff');
+  bg.addColorStop(0.5, '#dddddd');
+  bg.addColorStop(1,   '#888888');
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.arc(bx, by, br, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pentagons (simplified — just dark patches)
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.arc(bx, by, br * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  const offsets = [[0.7, 0], [-0.5, 0.5], [-0.5, -0.5]];
+  offsets.forEach(([ox, oy]) => {
+    ctx.beginPath();
+    ctx.arc(bx + ox * br, by + oy * br, br * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawEntity(entity, colorLight, colorDark, s) {
+  const ex = entity.x * s;
+  const ey = entity.y * s;
+  const er = entity.radius * s;
+
+  // Shadow
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(ex + 2*s, ey + 3*s, er * 0.9, er * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Body gradient
+  const bg = ctx.createRadialGradient(ex - er*0.3, ey - er*0.3, er*0.1, ex, ey, er);
+  bg.addColorStop(0, colorLight);
+  bg.addColorStop(1, colorDark);
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.arc(ex, ey, er, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // Direction indicator — small dot showing aim
+  const toBallX = ball.x - entity.x;
+  const toBallY = ball.y - entity.y;
+  const n = normalize(toBallX, toBallY);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(ex + n.x * er * 0.55, ey + n.y * er * 0.55, 3 * s, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawKickEffect(entity, s) {
+  if (entity.kickAnim <= 0) return;
+  const t  = entity.kickAnim / 12;
+  const ex = entity.x * s;
+  const ey = entity.y * s;
+  const er = entity.radius * s;
+
+  ctx.save();
+  ctx.globalAlpha = t * 0.6;
+  ctx.strokeStyle = entity.team === 'player' ? '#3cf' : '#f84';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.arc(ex, ey, er * (1 + (1 - t) * 1.2), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPauseOverlay(W, H) {
+  ctx.fillStyle = 'rgba(0,8,20,0.65)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#aec';
+  ctx.font = `bold ${Math.round(36 * scale)}px 'Courier New', monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PAUSED', W/2, H/2 - 10 * scale);
+  ctx.font = `${Math.round(16 * scale)}px 'Courier New', monospace`;
+  ctx.fillStyle = '#678';
+  ctx.fillText('Press P or ESC to resume', W/2, H/2 + 22 * scale);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 13. UI & HUD
+// ─────────────────────────────────────────────────────────────
+function updateScoreUI() {
+  document.getElementById('scorePlayer').textContent = state.scoreP;
+  document.getElementById('scoreAI').textContent     = state.scoreAI;
+}
+
+function updateTimerUI() {
+  const el  = document.getElementById('timerBox');
+  const min = Math.floor(state.timeLeft / 60);
+  const sec = state.timeLeft % 60;
+  el.textContent = `${min}:${sec.toString().padStart(2,'0')}`;
+  if (state.timeLeft <= 20) el.classList.add('urgent');
+  else                       el.classList.remove('urgent');
+}
+
+function togglePause() {
+  if (!state.running) return;
+  state.paused = !state.paused;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 14. SOUND (Web Audio API — no files needed)
+// ─────────────────────────────────────────────────────────────
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(freq, type, duration, vol = 0.3, decay = 0.15) {
+  try {
+    const ac  = getAudioCtx();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    gain.gain.setValueAtTime(vol, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + duration + decay);
+  } catch(e) {}
+}
+
+function playSound(type) {
+  switch (type) {
+    case 'kick':
+      playTone(180, 'sawtooth', 0.12, 0.25);
+      setTimeout(() => playTone(120, 'sine', 0.08, 0.15), 40);
+      break;
+    case 'goalPlayer':
+      [523, 659, 784, 1047].forEach((f, i) =>
+        setTimeout(() => playTone(f, 'sine', 0.25, 0.35), i * 100));
+      break;
+    case 'goalAI':
+      [330, 277, 220, 165].forEach((f, i) =>
+        setTimeout(() => playTone(f, 'sawtooth', 0.2, 0.25), i * 80));
+      break;
+    case 'whistle':
+      playTone(1800, 'sine', 0.5, 0.4);
+      setTimeout(() => playTone(2000, 'sine', 0.3, 0.35), 120);
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 15. GAME INIT & CONTROL
+// ─────────────────────────────────────────────────────────────
+function startGame() {
+  resizeCanvas();
+
+  state.running   = true;
+  state.paused    = false;
+  state.timeLeft  = CFG.MATCH_DURATION;
+  state.scoreP    = 0;
+  state.scoreAI   = 0;
+  state.kickoff   = false;
+
+  ai.speed = CFG.AI_SPEED_BASE;
+
+  updateScoreUI();
+  updateTimerUI();
+
+  resetPositions('player');
+
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('endScreen').classList.add('hidden');
+
+  startTimer();
+  playSound('whistle');
+
+  state.lastTime = performance.now();
+  requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  state.running = false;
+  clearInterval(timerInterval);
+  playSound('whistle');
+
+  const endEl   = document.getElementById('endScreen');
+  const resEl   = document.getElementById('resultText');
+  const scoreEl = document.getElementById('finalScore');
+
+  scoreEl.textContent = `YOU ${state.scoreP}  —  ${state.scoreAI} AI`;
+
+  if (state.scoreP > state.scoreAI) {
+    resEl.innerHTML = '<span class="win">YOU WIN! 🏆</span>';
+    playSound('goalPlayer');
+  } else if (state.scoreAI > state.scoreP) {
+    resEl.innerHTML = '<span class="lose">AI WINS 🤖</span>';
+  } else {
+    resEl.innerHTML = '<span class="draw">DRAW 🤝</span>';
+  }
+
+  endEl.classList.remove('hidden');
+}
+
+// ── Button Listeners ─────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click',   startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+// ── Mobile Detection ─────────────────────────────────────────
+if (isMobile()) showMobileControls();
+
+// Draw initial static frame
+resizeCanvas();
+(function drawIdle() {
+  const W = canvas.width, H = canvas.height, s = scale;
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   '#0d3d1a');
+  grad.addColorStop(0.5, '#104520');
+  grad.addColorStop(1,   '#0d3d1a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // centre circle preview
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.arc(W/2, H/2, 55 * s, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(W/2, FIELD.MARGIN_Y * s);
+  ctx.lineTo(W/2, (FIELD.H - FIELD.MARGIN_Y) * s);
+  ctx.stroke();
+
+  // idle ball
+  ctx.fillStyle = '#ddd';
+  ctx.beginPath();
+  ctx.arc(W/2, H/2, CFG.BALL_RADIUS * s, 0, Math.PI*2);
+  ctx.fill();
+})();
+
+</script>
+</body>
+</html>
